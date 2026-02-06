@@ -4,12 +4,15 @@ import type { RegistrationResponseJSON } from '@simplewebauthn/types';
 import { getUserByUsername, saveAuthenticator, createSession } from '@/lib/auth';
 import { challenges } from '@/lib/challenges';
 
-const RP_ID = process.env.RP_ID || 'localhost';
-const ORIGIN = process.env.ORIGIN || 'http://localhost:3000';
-
 export async function POST(request: NextRequest) {
   try {
     const { username, response } = await request.json();
+
+    // Get RP_ID and ORIGIN from environment or dynamically from request
+    const host = request.headers.get('host') || 'localhost';
+    const protocol = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    const RP_ID = process.env.RP_ID || host.split(':')[0];
+    const ORIGIN = process.env.ORIGIN || `${protocol}://${host}`;
 
     if (!username || !response) {
       return NextResponse.json({ error: 'Username and response required' }, { status: 400 });
