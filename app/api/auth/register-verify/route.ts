@@ -41,10 +41,13 @@ export async function POST(request: NextRequest) {
 
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
+    // Convert credentialID to base64url string
+    const credentialIdString = Buffer.from(credentialID).toString('base64url');
+
     // Save authenticator
     saveAuthenticator(
       user.id,
-      credentialID,
+      credentialIdString,
       Buffer.from(credentialPublicKey),
       counter,
       response.response?.transports
@@ -59,6 +62,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Registration successful' });
   } catch (error) {
     console.error('Error verifying registration:', error);
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('Error details:', { message: errorMessage, stack: errorStack });
+    return NextResponse.json({ 
+      error: 'Verification failed', 
+      details: errorMessage 
+    }, { status: 500 });
   }
 }
