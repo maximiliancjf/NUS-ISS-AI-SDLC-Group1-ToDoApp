@@ -49,5 +49,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to generate options' }, { status: 500 });
   }
 }
-
-export { challenges };

@@ -426,8 +426,8 @@ export function getAllTodosWithTags(userId: number): (Todo & { subtasks: Subtask
   const todos = getTodosByUserId(userId);
   return todos.map(todo => ({
     ...todo,
-    subtasks: getSubtasksByTodoId(todo.id),
-    tags: getTagsForTodo(todo.id),
+    subtasks: getSubtasksByTodoId(todo.id) || [],
+    tags: getTagsForTodo(todo.id) || [],
   }));
 }
 

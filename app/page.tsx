@@ -979,7 +979,7 @@ export default function TodoApp() {
                       </p>
                       
                       {/* Tags Display */}
-                      {todo.tags.length > 0 && (
+                      {todo.tags && todo.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {todo.tags.map(tag => (
                             <span
