@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
-import { getAllTodosWithTags, createTodo, getOrCreateUser } from '@/lib/db';
+import { getAllTodosWithTags, createTodo } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const user = getOrCreateUser();
-    const todos = getAllTodosWithTags(user.id);
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const todos = getAllTodosWithTags(session.userId);
     return NextResponse.json(todos);
   } catch (error) {
     console.error('Error fetching todos:', error);
@@ -14,6 +19,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const { title, due_date, priority, recurrence_pattern, reminder_minutes } = await request.json();
 
     if (!title || !due_date) {
@@ -23,8 +33,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = getOrCreateUser();
-    const todo = createTodo(user.id, title, due_date, priority || 'medium');
+    const todo = createTodo(session.userId, title, due_date, priority || 'medium');
     
     // Update recurrence pattern and reminder if provided
     const db = require('@/lib/db').default;

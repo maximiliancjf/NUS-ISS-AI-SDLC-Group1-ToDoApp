@@ -35,8 +35,9 @@ export async function POST(request: NextRequest) {
       authenticatorSelection: {
         residentKey: 'preferred',
         userVerification: 'preferred',
-        authenticatorAttachment: 'platform',
+        // Remove authenticatorAttachment to allow any authenticator type
       },
+      timeout: 60000, // 60 seconds timeout
     });
 
     // Store challenge temporarily

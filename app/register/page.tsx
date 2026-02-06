@@ -9,34 +9,7 @@ export default function RegisterPage() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [password, setPassword] = useState('');
   const router = useRouter();
-
-  const handleDevRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/dev-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Registration failed');
-      }
-
-      router.push('/');
-    } catch (err: any) {
-      console.error('Registration error:', err);
-      setError(err.message || 'Registration failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,98 +50,77 @@ export default function RegisterPage() {
       router.push('/');
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError(err.message || 'Registration failed');
+      if (err.name === 'NotAllowedError') {
+        setError('Passkey registration was cancelled or is not available on this device.');
+      } else {
+        setError(err.message || 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Create your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your details to get started
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleDevRegister}>
-          <div className="rounded-md shadow-sm space-y-3">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full">
+        <div className="bg-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Todo App
+            </h1>
+            <p className="text-slate-400 text-sm">
+              Create your account with a passkey
+            </p>
+          </div>
+
+          <form onSubmit={handleRegister} className="space-y-4">
             <div>
-              <label htmlFor="username" className="sr-only">
+              <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
                 Username
               </label>
               <input
                 id="username"
                 name="username"
                 type="text"
-                autoComplete="username"
+                autoComplete="username webauthn"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Username"
+                className="appearance-none block w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Choose a username"
               />
             </div>
-            
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-              />
-            </div>
-          </div>
 
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="flex">
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
-                </div>
+            {error && (
+              <div className="rounded-lg bg-red-900/50 border border-red-700 p-3">
+                <p className="text-sm text-red-200">{error}</p>
               </div>
-            </div>
-          )}
+            )}
 
-          <div>
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? (
-                <span>Creating account...</span>
-              ) : (
-                <>
-                  <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                    🔑
-                  </span>
-                  Create Account
-                </>
-              )}
+              {loading ? 'Creating account...' : 'Create Account with Passkey'}
             </button>
-          </div>
+          </form>
 
           <div className="text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Already have an account?{' '}
-              <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link href="/login" className="font-medium text-blue-400 hover:text-blue-300">
                 Sign in
               </Link>
             </p>
           </div>
-        </form>
+
+          <div className="pt-4 border-t border-slate-700">
+            <p className="text-xs text-slate-500 text-center">
+              <span className="font-semibold text-slate-400">Passkeys</span> use your device's biometrics (fingerprint, face recognition) or PIN for secure authentication. No passwords needed!
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

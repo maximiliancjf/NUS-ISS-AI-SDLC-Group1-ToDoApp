@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTodosNeedingReminders, updateLastNotificationSent } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = 1; // Default user
-    const todos = getTodosNeedingReminders(userId);
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const todos = getTodosNeedingReminders(session.userId);
     
     const now = new Date();
     const todosToNotify = todos.filter(todo => {

@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteTemplate, instantiateTemplate } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const { id } = await params;
     const templateId = parseInt(id);
     if (isNaN(templateId)) {
@@ -25,6 +31,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const { id } = await params;
     const templateId = parseInt(id);
     if (isNaN(templateId)) {
@@ -38,8 +49,7 @@ export async function POST(
       return NextResponse.json({ error: 'Due date is required' }, { status: 400 });
     }
 
-    const userId = 1; // Default user
-    const todoId = instantiateTemplate(templateId, userId, dueDate);
+    const todoId = instantiateTemplate(templateId, session.userId, dueDate);
 
     return NextResponse.json({ id: todoId, message: 'Todo created from template' });
   } catch (error) {

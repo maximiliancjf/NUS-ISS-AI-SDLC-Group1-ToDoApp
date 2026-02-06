@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createTag, getTagsByUserId, getOrCreateUser } from '@/lib/db';
+import { createTag, getTagsByUserId } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const user = getOrCreateUser();
-    const tags = getTagsByUserId(user.id);
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const tags = getTagsByUserId(session.userId);
     return NextResponse.json(tags);
   } catch (error) {
     console.error('Error fetching tags:', error);
@@ -14,14 +19,18 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const { name, color } = await request.json();
 
     if (!name) {
       return NextResponse.json({ error: 'Tag name is required' }, { status: 400 });
     }
 
-    const user = getOrCreateUser();
-    const tag = createTag(user.id, name, color);
+    const tag = createTag(session.userId, name, color);
     
     return NextResponse.json(tag, { status: 201 });
   } catch (error: any) {

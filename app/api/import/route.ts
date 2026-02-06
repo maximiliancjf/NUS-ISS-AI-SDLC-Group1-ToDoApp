@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
-import { getOrCreateUser, createTodo, createSubtask, createTag, addTagToTodo, getTagsByUserId } from '@/lib/db';
+import { createTodo, createSubtask, createTag, addTagToTodo, getTagsByUserId } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const importData = await request.json();
-    const user = getOrCreateUser();
 
     // Validate import data
     if (!importData.todos || !Array.isArray(importData.todos)) {
       return NextResponse.json({ error: 'Invalid import data' }, { status: 400 });
     }
 
-    const existingTags = getTagsByUserId(user.id);
+    const existingTags = getTagsByUserId(session.userId);
     const tagMapping: { [key: number]: number } = {};
     const todoMapping: { [key: number]: number } = {};
 
@@ -22,7 +27,7 @@ export async function POST(request: Request) {
         if (existingTag) {
           tagMapping[tag.id] = existingTag.id;
         } else {
-          const newTag = createTag(user.id, tag.name, tag.color);
+          const newTag = createTag(session.userId, tag.name, tag.color);
           tagMapping[tag.id] = newTag.id;
         }
       }
@@ -31,7 +36,7 @@ export async function POST(request: Request) {
     // Import todos
     for (const todo of importData.todos) {
       const newTodo = createTodo(
-        user.id,
+        session.userId,
         todo.title,
         todo.due_date,
         todo.priority || 'medium'

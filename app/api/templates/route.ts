@@ -7,11 +7,16 @@ import {
   getTagsForTodo,
   Priority
 } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const userId = 1; // Default user
-    const templates = getTemplatesByUserId(userId);
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const templates = getTemplatesByUserId(session.userId);
     return NextResponse.json(templates);
   } catch (error) {
     console.error('Error fetching templates:', error);
@@ -21,14 +26,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
     const body = await request.json();
     const { name, todoId } = body;
 
     if (!name || !todoId) {
       return NextResponse.json({ error: 'Name and todoId are required' }, { status: 400 });
     }
-
-    const userId = 1; // Default user
 
     // Get the todo to use as template
     const todo = getTodoById(todoId);
@@ -57,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const templateId = createTemplate(
-      userId,
+      session.userId,
       name,
       null, // category
       dueDateOffset,

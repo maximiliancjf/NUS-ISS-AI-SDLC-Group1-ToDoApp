@@ -9,34 +9,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [password, setPassword] = useState('');
   const router = useRouter();
-
-  const handleDevLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/auth/dev-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Login failed');
-      }
-
-      router.push('/');
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,97 +50,77 @@ export default function LoginPage() {
       router.push('/');
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed');
+      if (err.name === 'NotAllowedError') {
+        setError('Passkey authentication was cancelled or is not available on this device.');
+      } else {
+        setError(err.message || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your credentials to continue
-          </p>
-        </div>
-        <form className="mt-8 space-y-6" onSubmit={handleDevLogin}>
-          <div className="rounded-md shadow-sm space-y-3">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full">
+        <div className="bg-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Todo App
+            </h1>
+            <p className="text-slate-400 text-sm">
+              Sign in with your passkey
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label htmlFor="username" className="sr-only">
+              <label htmlFor="username" className="block text-sm font-medium text-slate-300 mb-2">
                 Username
               </label>
               <input
                 id="username"
                 name="username"
                 type="text"
-                autoComplete="username"
+                autoComplete="username webauthn"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-purple-500 focus:border-purple-500 focus:z-10 sm:text-sm"
-                placeholder="Username"
+                className="appearance-none block w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter your username"
               />
             </div>
-            
-            <div>
-              <label htmlFor="password" className="sr-only">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-purple-500 focus:border-purple-500 focus:z-10 sm:text-sm"
-                placeholder="Password"
-              />
-            </div>
-          </div>
 
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="flex">
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">{error}</h3>
-                </div>
+            {error && (
+              <div className="rounded-lg bg-red-900/50 border border-red-700 p-3">
+                <p className="text-sm text-red-200">{error}</p>
               </div>
-            </div>
-          )}
+            )}
 
-          <div>
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-white font-medium bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? (
-                <span>Signing in...</span>
-              ) : (
-                <>
-                  <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                    🔑
-                  </span>
-                  Sign in
-                </>
-              )}
+              {loading ? 'Signing in...' : 'Sign in with Passkey'}
             </button>
-          </div>
+          </form>
 
           <div className="text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-slate-400">
               Don't have an account?{' '}
-              <Link href="/register" className="font-medium text-purple-600 hover:text-purple-500">
+              <Link href="/register" className="font-medium text-blue-400 hover:text-blue-300">
                 Register
               </Link>
             </p>
           </div>
-        </form>
+
+          <div className="pt-4 border-t border-slate-700">
+            <p className="text-xs text-slate-500 text-center">
+              <span className="font-semibold text-slate-400">Passkeys</span> use your device's biometrics (fingerprint, face recognition) or PIN for secure authentication. No passwords needed!
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

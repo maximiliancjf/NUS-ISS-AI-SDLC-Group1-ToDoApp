@@ -1,16 +1,21 @@
 import { NextResponse } from 'next/server';
-import { getOrCreateUser, getAllTodosWithTags, getTagsByUserId } from '@/lib/db';
+import { getAllTodosWithTags, getTagsByUserId } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 export async function GET() {
   try {
-    const user = getOrCreateUser();
-    const todos = getAllTodosWithTags(user.id);
-    const tags = getTagsByUserId(user.id);
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    const todos = getAllTodosWithTags(session.userId);
+    const tags = getTagsByUserId(session.userId);
 
     const exportData = {
       version: '1.0',
       exportDate: new Date().toISOString(),
-      user: { username: user.username },
+      user: { username: session.username },
       todos,
       tags,
     };
