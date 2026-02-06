@@ -3,10 +3,11 @@ import { deleteTemplate, instantiateTemplate } from '@/lib/db';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const templateId = parseInt(params.id);
+    const { id } = await params;
+    const templateId = parseInt(id);
     if (isNaN(templateId)) {
       return NextResponse.json({ error: 'Invalid template ID' }, { status: 400 });
     }
@@ -21,10 +22,11 @@ export async function DELETE(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const templateId = parseInt(params.id);
+    const { id } = await params;
+    const templateId = parseInt(id);
     if (isNaN(templateId)) {
       return NextResponse.json({ error: 'Invalid template ID' }, { status: 400 });
     }

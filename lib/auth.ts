@@ -51,7 +51,10 @@ export async function getSession(): Promise<SessionData | null> {
 
   try {
     const { payload } = await jwtVerify(sessionCookie.value, JWT_SECRET);
-    return payload as SessionData;
+    if (typeof payload.userId === 'number' && typeof payload.username === 'string') {
+      return { userId: payload.userId, username: payload.username };
+    }
+    return null;
   } catch (error) {
     return null;
   }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
-import type { RegistrationResponseJSON } from '@simplewebauthn/server/script/deps';
+import type { RegistrationResponseJSON } from '@simplewebauthn/types';
 import { getUserByUsername, saveAuthenticator, createSession } from '@/lib/auth';
-import { challenges } from '../register-options/route';
+import { challenges } from '@/lib/challenges';
 
 const RP_ID = process.env.RP_ID || 'localhost';
 const ORIGIN = process.env.ORIGIN || 'http://localhost:3000';
@@ -36,12 +36,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Verification failed' }, { status: 400 });
     }
 
-    const { credential, credentialPublicKey, counter } = verification.registrationInfo;
+    const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
 
     // Save authenticator
     saveAuthenticator(
       user.id,
-      credential.id,
+      credentialID,
       Buffer.from(credentialPublicKey),
       counter,
       response.response?.transports

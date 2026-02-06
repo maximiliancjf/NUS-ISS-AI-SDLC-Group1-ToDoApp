@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import type { AuthenticationResponseJSON } from '@simplewebauthn/server/script/deps';
+import type { AuthenticationResponseJSON } from '@simplewebauthn/types';
 import { getUserByUsername, getAuthenticatorByCredentialId, updateAuthenticatorCounter, createSession } from '@/lib/auth';
-import { loginChallenges } from '../login-options/route';
+import { loginChallenges } from '@/lib/challenges';
 
 const RP_ID = process.env.RP_ID || 'localhost';
 const ORIGIN = process.env.ORIGIN || 'http://localhost:3000';
@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
       expectedChallenge,
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
-      credential: {
-        id: authenticator.credential_id,
-        publicKey: new Uint8Array(authenticator.credential_public_key),
+      authenticator: {
+        credentialID: authenticator.credential_id,
+        credentialPublicKey: new Uint8Array(authenticator.credential_public_key),
         counter: authenticator.counter,
       },
     });

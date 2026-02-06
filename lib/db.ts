@@ -485,15 +485,14 @@ export function instantiateTemplate(templateId: number, userId: number, dueDate:
   }
 
   // Create the todo from template
-  const todoId = createTodo(
+  const todo = createTodo(
     userId,
     `Todo from ${template.name}`,
     dueDate,
-    template.priority,
-    null,
-    null,
-    null
+    template.priority
   );
+
+  const todoId = todo.id;
 
   // Add subtasks if present
   if (template.subtasks_json) {

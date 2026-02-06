@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { getUserByUsername, createUser } from '@/lib/auth';
+import { challenges } from '@/lib/challenges';
 
 const RP_NAME = process.env.RP_NAME || 'Todo App';
 const RP_ID = process.env.RP_ID || 'localhost';
-
-// Store challenges temporarily (in production, use Redis or database)
-const challenges = new Map<string, string>();
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,8 +21,9 @@ export async function POST(request: NextRequest) {
     if (user) {
       userId = user.id;
     } else {
-      // Create new user
-      userId = createUser(username);
+      // Create new user with a temporary password for WebAuthn
+      // In a real implementation, you'd want a different approach
+      userId = await createUser(username, 'webauthn-temp-' + Math.random().toString(36));
     }
 
     const options = await generateRegistrationOptions({

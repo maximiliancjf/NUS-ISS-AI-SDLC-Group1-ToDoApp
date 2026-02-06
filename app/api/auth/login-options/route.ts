@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { getUserByUsername, getAuthenticatorsByUserId } from '@/lib/auth';
+import { loginChallenges } from '@/lib/challenges';
 
 const RP_ID = process.env.RP_ID || 'localhost';
-
-// Store challenges temporarily
-const loginChallenges = new Map<string, string>();
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,8 +26,8 @@ export async function POST(request: NextRequest) {
     const options = await generateAuthenticationOptions({
       rpID: RP_ID,
       allowCredentials: authenticators.map(auth => ({
-        id: new Uint8Array(Buffer.from(auth.credential_id, 'base64url')),
-        type: 'public-key',
+        id: auth.credential_id,
+        type: 'public-key' as const,
         transports: auth.transports ? JSON.parse(auth.transports) : undefined,
       })),
       userVerification: 'preferred',
