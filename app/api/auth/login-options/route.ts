@@ -3,11 +3,13 @@ import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { getUserByUsername, getAuthenticatorsByUserId } from '@/lib/auth';
 import { loginChallenges } from '@/lib/challenges';
 
-const RP_ID = process.env.RP_ID || 'localhost';
-
 export async function POST(request: NextRequest) {
   try {
     const { username } = await request.json();
+
+    // Get RP_ID from environment or dynamically from request
+    const host = request.headers.get('host') || 'localhost';
+    const RP_ID = process.env.RP_ID || host.split(':')[0]; // Remove port if present
 
     if (!username || typeof username !== 'string') {
       return NextResponse.json({ error: 'Username required' }, { status: 400 });

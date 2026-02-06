@@ -1,11 +1,4 @@
 {
-  "/api/auth/login-options/route": "app/api/auth/login-options/route.js",
-  "/api/auth/login-verify/route": "app/api/auth/login-verify/route.js",
-  "/api/auth/session/route": "app/api/auth/session/route.js",
-  "/api/todos/route": "app/api/todos/route.js",
-  "/api/tags/route": "app/api/tags/route.js",
-  "/api/templates/route": "app/api/templates/route.js",
-  "/api/auth/logout/route": "app/api/auth/logout/route.js",
   "/register/page": "app/register/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js"
