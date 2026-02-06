@@ -10,7 +10,8 @@ export async function POST(request: NextRequest) {
 
     // Get RP_ID and ORIGIN from environment or dynamically from request
     const host = request.headers.get('host') || 'localhost';
-    const protocol = request.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const protocol = forwardedProto ? forwardedProto : (host.includes('localhost') ? 'http' : 'https');
     const RP_ID = process.env.RP_ID || host.split(':')[0];
     const ORIGIN = process.env.ORIGIN || `${protocol}://${host}`;
 
