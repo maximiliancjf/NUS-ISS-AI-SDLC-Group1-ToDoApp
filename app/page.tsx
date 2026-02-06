@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Priority = 'high' | 'medium' | 'low';
 
@@ -19,6 +21,18 @@ interface Tag {
   color: string;
 }
 
+interface Template {
+  id: number;
+  user_id: number;
+  name: string;
+  category: string | null;
+  due_date_offset: number;
+  priority: Priority;
+  subtasks_json: string | null;
+  tag_ids_json: string | null;
+  created_at: string;
+}
+
 interface Todo {
   id: number;
   title: string;
@@ -28,9 +42,12 @@ interface Todo {
   completed_at: string | null;
   subtasks: Subtask[];
   tags: Tag[];
+  recurrence_pattern?: string | null;
+  reminder_minutes?: number | null;
 }
 
 export default function TodoApp() {
+  const router = useRouter();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [title, setTitle] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -48,11 +65,42 @@ export default function TodoApp() {
   const [searchText, setSearchText] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [recurrence, setRecurrence] = useState<string>('');
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [saveTemplateTodoId, setSaveTemplateTodoId] = useState<number | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [templateDueDate, setTemplateDueDate] = useState('');
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [currentUser, setCurrentUser] = useState<string>('');
 
   useEffect(() => {
+    fetchCurrentUser();
     fetchTodos();
     fetchTags();
+    fetchTemplates();
+    checkNotificationPermission();
+    
+    // Poll for reminders every minute
+    const reminderInterval = setInterval(checkReminders, 60000);
+    return () => clearInterval(reminderInterval);
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch('/api/auth/session');
+      const data = await res.json();
+      if (data.user) {
+        setCurrentUser(data.user.username);
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+    }
+  };
 
   const fetchTodos = async () => {
     try {
@@ -76,6 +124,66 @@ export default function TodoApp() {
     }
   };
 
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      setTemplates(data);
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+    }
+  };
+
+  const checkNotificationPermission = () => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    }
+  };
+
+  const checkReminders = async () => {
+    if (notificationPermission !== 'granted') return;
+
+    try {
+      const res = await fetch('/api/reminders');
+      const todosToNotify = await res.json();
+
+      for (const todo of todosToNotify) {
+        new Notification('Todo Reminder', {
+          body: `"${todo.title}" is due ${formatDueTime(todo)}`,
+          icon: '/favicon.ico',
+          tag: `todo-${todo.id}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error checking reminders:', error);
+    }
+  };
+
+  const formatDueTime = (todo: Todo) => {
+    const dueDate = new Date(todo.due_date);
+    const now = new Date();
+    const diff = dueDate.getTime() - now.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `in ${days} day${days !== 1 ? 's' : ''}`;
+    } else if (hours > 0) {
+      return `in ${hours} hour${hours !== 1 ? 's' : ''}`;
+    } else if (minutes > 0) {
+      return `in ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    }
+    return 'soon';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !dueDate) return;
@@ -94,15 +202,24 @@ export default function TodoApp() {
         const res = await fetch('/api/todos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, due_date: dueDate, priority }),
+          body: JSON.stringify({ 
+            title, 
+            due_date: dueDate, 
+            priority,
+            recurrence_pattern: recurrence || null,
+            reminder_minutes: reminderMinutes
+          }),
         });
         const newTodo = await res.json();
-        setTodos([...todos, { ...newTodo, subtasks: [] }]);
+        setTodos([...todos, { ...newTodo, subtasks: [], tags: [] }]);
       }
       
       setTitle('');
       setDueDate('');
       setPriority('medium');
+      setRecurrence('');
+      setReminderMinutes(null);
+      setShowAdvanced(false);
     } catch (error) {
       console.error('Error saving todo:', error);
     }
@@ -316,6 +433,140 @@ export default function TodoApp() {
 
   const hasActiveFilters = searchText || priorityFilter !== 'all' || statusFilter !== 'all' || filterTag !== null;
 
+  const exportData = async () => {
+    try {
+      const res = await fetch('/api/export');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `todos-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error exporting:', error);
+      alert('Failed to export data');
+    }
+  };
+
+  const importData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!confirm(`Import ${data.todos?.length || 0} todos and ${data.tags?.length || 0} tags?`)) {
+        return;
+      }
+
+      const res = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        alert('Data imported successfully!');
+        fetchTodos();
+        fetchTags();
+      } else {
+        alert('Failed to import data');
+      }
+    } catch (error) {
+      console.error('Error importing:', error);
+      alert('Failed to import data - invalid file format');
+    }
+  };
+
+  const saveAsTemplate = async () => {
+    if (!saveTemplateTodoId || !newTemplateName.trim()) return;
+
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newTemplateName,
+          todoId: saveTemplateTodoId,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Template saved successfully!');
+        setShowSaveTemplateModal(false);
+        setNewTemplateName('');
+        setSaveTemplateTodoId(null);
+        fetchTemplates();
+      } else {
+        alert('Failed to save template');
+      }
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Failed to save template');
+    }
+  };
+
+  const deleteTemplate = async (templateId: number) => {
+    if (!confirm('Delete this template?')) return;
+
+    try {
+      const res = await fetch(`/api/templates/${templateId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        fetchTemplates();
+      } else {
+        alert('Failed to delete template');
+      }
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      alert('Failed to delete template');
+    }
+  };
+
+  const useTemplate = async () => {
+    if (!selectedTemplateId || !templateDueDate) {
+      alert('Please select a template and due date');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/templates/${selectedTemplateId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: templateDueDate }),
+      });
+
+      if (res.ok) {
+        alert('Todo created from template!');
+        setShowTemplateModal(false);
+        setSelectedTemplateId(null);
+        setTemplateDueDate('');
+        fetchTodos();
+      } else {
+        alert('Failed to create todo from template');
+      }
+    } catch (error) {
+      console.error('Error using template:', error);
+      alert('Failed to create todo from template');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
       case 'high': return 'bg-red-100 text-red-800 border-red-300';
@@ -336,15 +587,59 @@ export default function TodoApp() {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">
-            📝 My Todo App
-          </h1>
-          <button
-            onClick={() => setShowTagModal(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-          >
-            🏷️ Manage Tags
-          </button>
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">
+              📝 My Todo App
+            </h1>
+            {currentUser && (
+              <p className="text-sm text-gray-600 mt-1">
+                Welcome, <span className="font-semibold">{currentUser}</span>
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Link
+              href="/calendar"
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+            >
+              📅 Calendar
+            </Link>
+            <button
+              onClick={exportData}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+              title="Export all data"
+            >
+              📥 Export
+            </button>
+            <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition cursor-pointer">
+              📤 Import
+              <input
+                type="file"
+                accept=".json"
+                onChange={importData}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => setShowTagModal(true)}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            >
+              🏷️ Manage Tags
+            </button>
+            <button
+              onClick={() => setShowTemplateModal(true)}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              📋 Templates
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+              title="Logout"
+            >
+              🚪 Logout
+            </button>
+          </div>
         </div>
 
         {/* Tag Filter Bar */}
@@ -550,6 +845,67 @@ export default function TodoApp() {
                 </select>
               </div>
             </div>
+            
+            {/* Advanced Options */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                {showAdvanced ? '▼' : '▶'} Advanced Options
+              </button>
+            </div>
+
+            {showAdvanced && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Recurrence Pattern
+                  </label>
+                  <select
+                    value={recurrence}
+                    onChange={(e) => setRecurrence(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">No Recurrence</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reminder
+                    {notificationPermission !== 'granted' && (
+                      <button
+                        type="button"
+                        onClick={requestNotificationPermission}
+                        className="ml-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Enable Notifications
+                      </button>
+                    )}
+                  </label>
+                  <select
+                    value={reminderMinutes ?? ''}
+                    onChange={(e) => setReminderMinutes(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">No Reminder</option>
+                    <option value="15">15 minutes before</option>
+                    <option value="30">30 minutes before</option>
+                    <option value="60">1 hour before</option>
+                    <option value="120">2 hours before</option>
+                    <option value="1440">1 day before</option>
+                    <option value="2880">2 days before</option>
+                    <option value="10080">1 week before</option>
+                  </select>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -612,6 +968,11 @@ export default function TodoApp() {
                         todo.completed ? 'line-through text-gray-500' : 'text-gray-900'
                       }`}>
                         {todo.title}
+                        {todo.recurrence_pattern && (
+                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                            🔄 {todo.recurrence_pattern}
+                          </span>
+                        )}
                       </h3>
                       <p className="text-sm text-gray-600">
                         Due: {new Date(todo.due_date).toLocaleDateString()}
@@ -700,6 +1061,16 @@ export default function TodoApp() {
                         +
                       </button>
                       <button
+                        onClick={() => {
+                          setSaveTemplateTodoId(todo.id);
+                          setShowSaveTemplateModal(true);
+                        }}
+                        className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition text-sm"
+                        title="Save as template"
+                      >
+                        📋
+                      </button>
+                      <button
                         onClick={() => startEdit(todo)}
                         className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition text-sm"
                         disabled={!!todo.completed}
@@ -782,6 +1153,158 @@ export default function TodoApp() {
             <h2 className="text-xl font-semibold text-gray-600 mb-4">
               ✅ Completed ({getFilteredTodos().filter(t => t.completed).length})
             </h2>
+          </div>
+        )}
+
+        {/* Save Template Modal */}
+        {showSaveTemplateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-xl font-semibold mb-4">Save as Template</h2>
+              <input
+                type="text"
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+                placeholder="Template name (e.g., Weekly Report)"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-4"
+                autoFocus
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setShowSaveTemplateModal(false);
+                    setNewTemplateName('');
+                    setSaveTemplateTodoId(null);
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveAsTemplate}
+                  disabled={!newTemplateName.trim()}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Templates Modal */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+              <h2 className="text-xl font-semibold mb-4">📋 Templates</h2>
+              
+              {templates.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  No templates yet. Save a todo as a template to reuse it later!
+                </p>
+              ) : (
+                <div className="space-y-3 mb-6">
+                  {templates.map(template => {
+                    const subtasks = template.subtasks_json ? JSON.parse(template.subtasks_json) : [];
+                    const tagIds = template.tag_ids_json ? JSON.parse(template.tag_ids_json) : [];
+                    const templateTags = tags.filter(t => tagIds.includes(t.id));
+                    
+                    return (
+                      <div 
+                        key={template.id}
+                        className={`p-4 border rounded-lg cursor-pointer transition ${
+                          selectedTemplateId === template.id 
+                            ? 'border-purple-600 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                        onClick={() => setSelectedTemplateId(template.id)}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{template.name}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`px-2 py-1 rounded-full text-xs ${
+                                getPriorityColor(template.priority as Priority)
+                              }`}>
+                                {template.priority.toUpperCase()}
+                              </span>
+                              {template.due_date_offset !== 0 && (
+                                <span className="text-xs text-gray-500">
+                                  Due: {template.due_date_offset > 0 ? '+' : ''}{template.due_date_offset} days
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteTemplate(template.id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        
+                        {subtasks.length > 0 && (
+                          <div className="mt-2 text-sm text-gray-600">
+                            📋 {subtasks.length} subtask{subtasks.length !== 1 ? 's' : ''}
+                          </div>
+                        )}
+                        
+                        {templateTags.length > 0 && (
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            {templateTags.map(tag => (
+                              <span
+                                key={tag.id}
+                                className="px-2 py-1 rounded text-xs"
+                                style={{ backgroundColor: tag.color + '40' }}
+                              >
+                                {tag.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedTemplateId && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Due Date for New Todo
+                  </label>
+                  <input
+                    type="date"
+                    value={templateDueDate}
+                    onChange={(e) => setTemplateDueDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setShowTemplateModal(false);
+                    setSelectedTemplateId(null);
+                    setTemplateDueDate('');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={useTemplate}
+                  disabled={!selectedTemplateId || !templateDueDate}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Create Todo
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

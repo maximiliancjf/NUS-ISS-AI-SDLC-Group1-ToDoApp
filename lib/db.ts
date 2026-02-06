@@ -12,6 +12,7 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -55,6 +56,33 @@ export function initializeDatabase() {
       FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT,
+      due_date_offset INTEGER DEFAULT 0,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      subtasks_json TEXT,
+      tag_ids_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS authenticators (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      credential_id TEXT UNIQUE NOT NULL,
+      credential_public_key BLOB NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_authenticators_user_id ON authenticators(user_id);
+    CREATE INDEX IF NOT EXISTS idx_authenticators_credential_id ON authenticators(credential_id);
   `);
 }
 
@@ -92,6 +120,18 @@ export interface Tag {
   user_id: number;
   name: string;
   color: string;
+}
+
+export interface Template {
+  id: number;
+  user_id: number;
+  name: string;
+  category: string | null;
+  due_date_offset: number;
+  priority: Priority;
+  subtasks_json: string | null;
+  tag_ids_json: string | null;
+  created_at: string;
 }
 
 // CRUD Operations for Todos
@@ -169,6 +209,30 @@ export function deleteTodo(id: number): boolean {
   const stmt = db.prepare('DELETE FROM todos WHERE id = ?');
   const result = stmt.run(id);
   return result.changes > 0;
+}
+
+export function getTodosNeedingReminders(userId: number): Todo[] {
+  const stmt = db.prepare(`
+    SELECT * FROM todos 
+    WHERE user_id = ? 
+      AND completed = 0 
+      AND reminder_minutes IS NOT NULL
+      AND (
+        last_notification_sent IS NULL 
+        OR datetime(last_notification_sent) < datetime('now', '-1 hour')
+      )
+    ORDER BY due_date ASC
+  `);
+  return stmt.all(userId) as Todo[];
+}
+
+export function updateLastNotificationSent(id: number): void {
+  const stmt = db.prepare(`
+    UPDATE todos 
+    SET last_notification_sent = datetime('now')
+    WHERE id = ?
+  `);
+  stmt.run(id);
 }
 
 // Subtask Operations
@@ -379,6 +443,83 @@ export function getOrCreateUser(username: string = 'demo-user'): { id: number; u
   }
   
   return user;
+}
+
+// Template functions
+export function createTemplate(
+  userId: number,
+  name: string,
+  category: string | null,
+  dueDateOffset: number,
+  priority: Priority,
+  subtasksJson: string | null,
+  tagIdsJson: string | null
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO templates (user_id, name, category, due_date_offset, priority, subtasks_json, tag_ids_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const result = stmt.run(userId, name, category, dueDateOffset, priority, subtasksJson, tagIdsJson);
+  return result.lastInsertRowid as number;
+}
+
+export function getTemplatesByUserId(userId: number): Template[] {
+  const stmt = db.prepare('SELECT * FROM templates WHERE user_id = ? ORDER BY created_at DESC');
+  return stmt.all(userId) as Template[];
+}
+
+export function getTemplateById(id: number): Template | undefined {
+  const stmt = db.prepare('SELECT * FROM templates WHERE id = ?');
+  return stmt.get(id) as Template | undefined;
+}
+
+export function deleteTemplate(id: number): void {
+  const stmt = db.prepare('DELETE FROM templates WHERE id = ?');
+  stmt.run(id);
+}
+
+export function instantiateTemplate(templateId: number, userId: number, dueDate: string): number {
+  const template = getTemplateById(templateId);
+  if (!template) {
+    throw new Error('Template not found');
+  }
+
+  // Create the todo from template
+  const todoId = createTodo(
+    userId,
+    `Todo from ${template.name}`,
+    dueDate,
+    template.priority,
+    null,
+    null,
+    null
+  );
+
+  // Add subtasks if present
+  if (template.subtasks_json) {
+    try {
+      const subtasks = JSON.parse(template.subtasks_json) as Array<{ title: string }>;
+      for (const subtask of subtasks) {
+        createSubtask(todoId, subtask.title);
+      }
+    } catch (e) {
+      console.error('Failed to parse subtasks JSON:', e);
+    }
+  }
+
+  // Add tags if present
+  if (template.tag_ids_json) {
+    try {
+      const tagIds = JSON.parse(template.tag_ids_json) as number[];
+      for (const tagId of tagIds) {
+        addTagToTodo(todoId, tagId);
+      }
+    } catch (e) {
+      console.error('Failed to parse tag IDs JSON:', e);
+    }
+  }
+
+  return todoId;
 }
 
 export default db;

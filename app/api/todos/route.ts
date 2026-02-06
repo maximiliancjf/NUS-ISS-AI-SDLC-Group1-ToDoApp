@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { title, due_date, priority } = await request.json();
+    const { title, due_date, priority, recurrence_pattern, reminder_minutes } = await request.json();
 
     if (!title || !due_date) {
       return NextResponse.json(
@@ -25,6 +25,25 @@ export async function POST(request: Request) {
 
     const user = getOrCreateUser();
     const todo = createTodo(user.id, title, due_date, priority || 'medium');
+    
+    // Update recurrence pattern and reminder if provided
+    const db = require('@/lib/db').default;
+    if (recurrence_pattern || reminder_minutes !== undefined) {
+      const updates: string[] = [];
+      const values: any[] = [];
+      
+      if (recurrence_pattern) {
+        updates.push('recurrence_pattern = ?');
+        values.push(recurrence_pattern);
+      }
+      if (reminder_minutes !== undefined) {
+        updates.push('reminder_minutes = ?');
+        values.push(reminder_minutes);
+      }
+      
+      values.push(todo.id);
+      db.prepare(`UPDATE todos SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
     
     return NextResponse.json(todo, { status: 201 });
   } catch (error) {
