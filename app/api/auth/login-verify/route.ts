@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 400 });
     }
 
-    const credentialId = Buffer.from(response.id, 'base64url').toString('base64url');
-    const authenticator = getAuthenticatorByCredentialId(credentialId);
+    // response.id is already base64url encoded
+    const authenticator = getAuthenticatorByCredentialId(response.id);
     
     if (!authenticator) {
       return NextResponse.json({ error: 'Authenticator not found' }, { status: 404 });
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       expectedOrigin: ORIGIN,
       expectedRPID: RP_ID,
       authenticator: {
-        credentialID: authenticator.credential_id,
+        credentialID: Buffer.from(authenticator.credential_id, 'base64url'),
         credentialPublicKey: new Uint8Array(authenticator.credential_public_key),
         counter: authenticator.counter,
       },
@@ -64,6 +64,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ verified: true, message: 'Login successful' });
   } catch (error) {
     console.error('Error verifying authentication:', error);
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Login error details:', { message: errorMessage, stack: error instanceof Error ? error.stack : '' });
+    return NextResponse.json({ 
+      error: 'Verification failed',
+      details: errorMessage 
+    }, { status: 500 });
   }
 }
